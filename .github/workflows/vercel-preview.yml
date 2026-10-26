@@ -1,0 +1,67 @@
+name: Vercel preview
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'demo checks deployment connectivity; web deploys the React app'
+        type: choice
+        options: [demo, web]
+        default: demo
+permissions:
+  contents: read
+concurrency:
+  group: vercel-preview-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: preview
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_CLI_VERSION: ${{ vars.VERCEL_CLI_VERSION }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check deployment configuration
+        shell: bash
+        run: |
+          test -n "$VERCEL_TOKEN" || { echo 'Missing VERCEL_TOKEN'; exit 1; }
+          test -n "$VERCEL_ORG_ID" || { echo 'Missing VERCEL_ORG_ID'; exit 1; }
+          test -n "$VERCEL_PROJECT_ID" || { echo 'Missing VERCEL_PROJECT_ID'; exit 1; }
+          [[ "$VERCEL_CLI_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Set an exact VERCEL_CLI_VERSION'; exit 1; }
+      - run: python scripts/harness.py check
+      - name: Check React app
+        if: inputs.target == 'web'
+        working-directory: apps/web
+        run: |
+          npm ci
+          npm run typecheck
+          npm test -- --run
+          npm run build
+      - name: Package selected target
+        env:
+          PREVIEW_TARGET: ${{ inputs.target }}
+        run: python scripts/prepare_preview.py --target "$PREVIEW_TARGET"
+      - name: Install pinned Vercel CLI
+        run: npm install --global "vercel@$VERCEL_CLI_VERSION"
+      - name: Deploy preview build only
+        shell: bash
+        run: |
+          vercel deploy --prebuilt --environment preview --json --yes --cwd artifacts/preview --token="$VERCEL_TOKEN" > artifacts/vercel-result.json
+          python -c 'import json; from pathlib import Path; d=json.loads(Path("artifacts/vercel-result.json").read_text())["deployment"]; Path("artifacts/preview-url.txt").write_text(d["url"] + "\n")'
+          preview_url="$(cat artifacts/preview-url.txt)"
+          [[ "$preview_url" == https://* ]] || { echo 'No deployment URL returned'; exit 1; }
+          printf 'Preview (%s): %s\n' '${{ inputs.target }}' "$preview_url" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: preview-url
+          path: artifacts/preview-url.txt
+          retention-days: 7

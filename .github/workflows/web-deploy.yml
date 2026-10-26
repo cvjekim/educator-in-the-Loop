@@ -1,0 +1,64 @@
+name: Web continuous deployment
+on:
+  push:
+    branches: [main]
+    paths: ['apps/web/**', '.github/workflows/web-deploy.yml']
+  pull_request:
+    paths: ['apps/web/**', '.github/workflows/web-deploy.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: web-deploy-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test -- --run
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: apps/web/dist
+  deploy:
+    needs: build
+    # Native Vercel Git integration can be used instead; do not deploy twice.
+    if: vars.VERCEL_DEPLOY_VIA_ACTIONS == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: apps/web/dist
+      - run: python scripts/prepare_preview.py --target web
+      - run: npm install --global vercel@65.2.0
+      - name: Deploy tested output
+        env:
+          DEPLOY_ENVIRONMENT: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && 'production' || 'preview' }}
+        run: |
+          test -n "$VERCEL_TOKEN" && test -n "$VERCEL_ORG_ID" && test -n "$VERCEL_PROJECT_ID"
+          vercel deploy --prebuilt --yes --json --environment "$DEPLOY_ENVIRONMENT" --cwd artifacts/preview --token "$VERCEL_TOKEN" > artifacts/deploy-result.json
+          python -c 'import json,os; d=json.load(open("artifacts/deploy-result.json"))["deployment"]; open(os.environ["GITHUB_STEP_SUMMARY"],"a").write("Deployment: " + d["url"] + "\n")'

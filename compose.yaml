@@ -1,0 +1,23 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    env_file: .env
+    environment:
+      API_DATABASE: /data/service.sqlite3
+    ports: ["127.0.0.1:8000:8000"]
+    volumes: ["educator-data:/data"]
+    restart: unless-stopped
+  worker:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    command: ["python", "-m", "apps.api.worker"]
+    env_file: .env
+    environment:
+      API_DATABASE: /data/service.sqlite3
+    volumes: ["educator-data:/data"]
+    restart: unless-stopped
+volumes:
+  educator-data:

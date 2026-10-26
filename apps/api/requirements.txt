@@ -1,0 +1,9 @@
+fastapi==0.162.0
+uvicorn==0.54.0
+python-multipart==0.0.32
+httpx==0.28.1
+-r ../../manager-agent/requirements.txt
+-r ../../lecture-note-agent/requirements.txt
+-r ../../practice-agent/requirements.txt
+-r ../../written-exam-agent/requirements.txt
+-r ../../project-exam-agent/requirements.txt
