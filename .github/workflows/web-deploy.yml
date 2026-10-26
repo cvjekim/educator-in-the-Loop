@@ -60,5 +60,12 @@ jobs:
           DEPLOY_ENVIRONMENT: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && 'production' || 'preview' }}
         run: |
           test -n "$VERCEL_TOKEN" && test -n "$VERCEL_ORG_ID" && test -n "$VERCEL_PROJECT_ID"
-          vercel deploy --prebuilt --yes --json --environment "$DEPLOY_ENVIRONMENT" --cwd artifacts/preview --token "$VERCEL_TOKEN" > artifacts/deploy-result.json
-          python -c 'import json,os; d=json.load(open("artifacts/deploy-result.json"))["deployment"]; open(os.environ["GITHUB_STEP_SUMMARY"],"a").write("Deployment: " + d["url"] + "\n")'
+          if ! vercel deploy --prebuilt --yes --json --verify --environment "$DEPLOY_ENVIRONMENT" --cwd artifacts/preview --token "$VERCEL_TOKEN" > artifacts/deploy-result.json 2> artifacts/deploy-private.log; then
+            echo "::error::Vercel deployment failed; inspect the deployment in the connected Vercel project."
+            exit 1
+          fi
+          if [ "$DEPLOY_ENVIRONMENT" = production ]; then
+            echo "Deployed: https://educator-in-the-loop-demo.vercel.app" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Preview deployed. Open the connected Vercel project to view it." >> "$GITHUB_STEP_SUMMARY"
+          fi
