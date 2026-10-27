@@ -147,7 +147,7 @@ def create_app(db_path=None, tokens=None, mode=None):
     @app.get('/v1/courses', response_model=list[Course], tags=['강의'])
     def courses(identity=Depends(owner)):
         with store.connect() as db:
-            return [json.loads(r['payload']) for r in db.execute('SELECT payload FROM courses WHERE owner=? ORDER BY rowid DESC', (identity,))]
+            return sorted((json.loads(r['payload']) for r in db.execute('SELECT payload FROM courses WHERE owner=?', (identity,))), key=lambda item: item['created_at'], reverse=True)
 
     @app.post('/v1/courses', response_model=Course, status_code=201, tags=['강의'])
     def create_course(body: CourseCreate, identity=Depends(owner)):
@@ -294,7 +294,9 @@ def create_app(db_path=None, tokens=None, mode=None):
             db.execute('BEGIN IMMEDIATE')
             owned(db, 'courses', course_id, identity)
             recover_expired(db, identity, course_id)
-            return [json.loads(r['payload']) for r in db.execute('SELECT payload FROM runs WHERE owner=? AND course_id=? ORDER BY rowid DESC', (identity, course_id))]
+            # PDF text may contain escaped NULs, which PostgreSQL JSON casts reject.
+            # Decode the stored JSON in Python, preserving source text and drafts.
+            return sorted((json.loads(r['payload']) for r in db.execute('SELECT payload FROM runs WHERE owner=? AND course_id=?', (identity, course_id))), key=lambda item: item['created_at'], reverse=True)
 
     @app.get('/v1/runs/{run_id}', response_model=Run, tags=['작업'])
     def run_detail(run_id: str, identity=Depends(owner)):

@@ -45,3 +45,25 @@ def test_postgres_concurrent_enqueue_and_worker_claim(postgres_app):
     assert process_once(postgres_app.state.store, run_id=run['id'])
     assert client.get(f"/v1/runs/{run['id']}/artifact").status_code == 200
     assert client.delete(f'/v1/courses/{c}').status_code == 204
+
+
+def test_lists_preserve_pdf_control_characters(postgres_app):
+    import json
+    client = TestClient(postgres_app, headers={'Authorization': 'Bearer synthetic-token'})
+    c = client.post('/v1/courses', json={'title':'Synthetic', 'syllabus':'PDF text \u0000 preserved'}).json()['id']
+    ids = []
+    for i in range(2):
+        response = client.post(f'/v1/courses/{c}/runs', json={'task_type':'manager','topic':'synthetic'}, headers={'Idempotency-Key':f'synthetic-key-{i}'})
+        assert response.status_code == 202
+        run = response.json()
+        run.update(created_at=f'2026-01-0{i+1}T00:00:00+00:00', citations=[{'document_id':'synthetic','filename':'synthetic.pdf','page':1,'text':'PDF \u0000 source'}])
+        with postgres_app.state.store.connect() as db:
+            db.execute('UPDATE runs SET payload=? WHERE id=?', (json.dumps(run), run['id']))
+        ids.append(run['id'])
+    courses = client.get('/v1/courses')
+    assert courses.status_code == 200
+    assert courses.json()[0]['syllabus'] == 'PDF text \u0000 preserved'
+    response = client.get(f'/v1/courses/{c}/runs')
+    assert response.status_code == 200
+    assert [r['id'] for r in response.json()] == ids[::-1]
+    assert response.json()[0]['citations'][0]['text'] == 'PDF \u0000 source'

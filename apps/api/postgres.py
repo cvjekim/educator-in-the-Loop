@@ -1,5 +1,4 @@
 """Postgres adapter for the pilot store; write transactions serialize state transitions."""
-import re
 
 SCHEMA = '''
 CREATE TABLE IF NOT EXISTS invitations (id TEXT PRIMARY KEY, token_hash TEXT UNIQUE NOT NULL, identity TEXT NOT NULL, issuer TEXT NOT NULL, payload TEXT NOT NULL, revoked INTEGER NOT NULL DEFAULT 0);
@@ -33,5 +32,4 @@ class Connection:
             # All mutation paths take the same transaction lock. No model calls occur inside it.
             return self.connection.execute('SELECT pg_advisory_xact_lock(73928461)')
         sql = sql.replace('?', '%s')
-        sql = re.sub(r'ORDER BY rowid', "ORDER BY (payload::jsonb ->> 'created_at')", sql)
         return self.connection.execute(sql, params)
