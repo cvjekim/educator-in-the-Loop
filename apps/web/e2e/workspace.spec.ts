@@ -1,10 +1,10 @@
 import {test,expect} from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
 
-test('desktop demo, keyboard access, responsive layout and accessibility',async({page})=>{
+test('login, keyboard access, responsive layout and accessibility',async({page})=>{
   await page.setViewportSize({width:1440,height:1100})
   await page.goto('/')
-  await expect(page.getByText('01_머신러닝_기초.md')).toBeVisible()
+  await expect(page.getByRole('heading',{name:'교수자 로그인'})).toBeVisible()
   await page.keyboard.press('Tab')
   await expect(page.getByRole('link',{name:'본문으로 건너뛰기'})).toBeFocused()
   await page.screenshot({path:'../../artifacts/screenshots/workspace-desktop.png',fullPage:true})
@@ -19,10 +19,9 @@ test('desktop demo, keyboard access, responsive layout and accessibility',async(
 
 test('real REST transport: upload → draft → revise → approve → download → feedback',async({page})=>{
   await page.goto('/')
-  await page.getByRole('button',{name:'실제 API 연결'}).click()
   await page.getByLabel('API 주소').fill('http://127.0.0.1:8100')
   await page.getByLabel('교수자 초대 토큰').fill('e2e-alice-token')
-  await page.getByRole('button',{name:'연결 확인'}).click()
+  await page.getByRole('button',{name:'로그인'}).click()
   await expect(page.getByText('연결된 API가 demo 모드입니다.',{exact:false})).toBeVisible()
   await page.getByRole('button',{name:'새 강의'}).click()
   await page.getByLabel('강의 이름').fill('E2E '+Date.now())

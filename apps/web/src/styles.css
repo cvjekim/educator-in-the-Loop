@@ -8,3 +8,5 @@
 
 /* Reading content stays comfortable at normal browser zoom. */
 .draft{font-size:16px}.draft p,.draft li{line-height:1.9}.subtitle{font-size:14px}label,input:not([type=checkbox]):not([type=file]),select,textarea{font-size:14px}.task-card span,.guide-panel li p,.form-footer>span{font-size:12px}
+
+.login-shell{min-height:100dvh;display:grid;place-items:center;padding:24px}.login-panel{width:min(100%,480px);box-sizing:border-box}.login-panel h1{font-size:28px}.login-panel>p{line-height:1.7}.login-panel form{margin-top:28px}.login-panel .notice{margin-top:20px}
