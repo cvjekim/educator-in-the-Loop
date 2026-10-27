@@ -42,7 +42,11 @@ class Store:
         db.row_factory = sqlite3.Row
         try:
             yield db
+            changed = db.total_changes > 0
             db.commit()
+            if changed:
+                from .events import notify_local
+                notify_local(self.path)
         except Exception:
             db.rollback()
             raise

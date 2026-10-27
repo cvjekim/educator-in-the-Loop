@@ -10,6 +10,27 @@ CREATE INDEX IF NOT EXISTS courses_owner ON courses(owner);
 CREATE INDEX IF NOT EXISTS documents_owner_course ON documents(owner,course_id);
 CREATE INDEX IF NOT EXISTS runs_owner_course ON runs(owner,course_id);
 CREATE INDEX IF NOT EXISTS runs_status ON runs(status);
+CREATE OR REPLACE FUNCTION educator_notify_course() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE course_key TEXT;
+BEGIN
+    IF TG_TABLE_NAME = 'courses' THEN
+        IF TG_OP = 'DELETE' THEN course_key := OLD.id; ELSE course_key := NEW.id; END IF;
+    ELSE
+        IF TG_OP = 'DELETE' THEN course_key := OLD.course_id; ELSE course_key := NEW.course_id; END IF;
+    END IF;
+    PERFORM pg_notify('course_' || md5(course_key), 'changed');
+    RETURN NULL;
+END;
+$$;
+CREATE OR REPLACE FUNCTION educator_notify_access() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    PERFORM pg_notify('educator_access', 'changed');
+    RETURN NULL;
+END;
+$$;
+CREATE OR REPLACE TRIGGER educator_runs_changed AFTER INSERT OR UPDATE OR DELETE ON runs FOR EACH ROW EXECUTE FUNCTION educator_notify_course();
+CREATE OR REPLACE TRIGGER educator_courses_changed AFTER UPDATE OR DELETE ON courses FOR EACH ROW EXECUTE FUNCTION educator_notify_course();
+CREATE OR REPLACE TRIGGER educator_access_changed AFTER UPDATE OR DELETE ON invitations FOR EACH ROW EXECUTE FUNCTION educator_notify_access();
 '''
 
 

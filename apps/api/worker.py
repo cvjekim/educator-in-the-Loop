@@ -23,7 +23,7 @@ def process_once(store, runner=None, run_id=None):
                 run.update(status='failed', error='worker_interrupted')
                 update_run(db, run, state)
         row = (db.execute("SELECT * FROM runs WHERE status='queued' AND id=?", (run_id,)).fetchone() if run_id else
-               db.execute("SELECT * FROM runs WHERE status='queued' ORDER BY rowid LIMIT 1").fetchone())
+               db.execute("SELECT * FROM runs WHERE status='queued' ORDER BY id LIMIT 1").fetchone())
         if not row:
             return False
         run, state = json.loads(row['payload']), json.loads(row['state'])

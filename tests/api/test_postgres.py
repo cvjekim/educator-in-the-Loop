@@ -67,3 +67,10 @@ def test_lists_preserve_pdf_control_characters(postgres_app):
     assert response.status_code == 200
     assert [r['id'] for r in response.json()] == ids[::-1]
     assert response.json()[0]['citations'][0]['text'] == 'PDF \u0000 source'
+
+
+def test_postgres_stream_commit_notifications(postgres_app):
+    from test_events import exercise_stream
+    client=TestClient(postgres_app,headers={'Authorization':'Bearer synthetic-token'})
+    c=client.post('/v1/courses',json={'title':'Synthetic'}).json()['id']
+    exercise_stream(postgres_app.state.store,c,'synthetic-owner')

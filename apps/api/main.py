@@ -17,7 +17,7 @@ from uuid import uuid4
 from fastapi import Depends, FastAPI, File, Header, HTTPException, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from .models import Course, CourseCreate, Document, DraftUpdate, Error, FeedbackCreate, ReviewCreate, RetryCreate, SearchCreate, Run, RunCreate
@@ -297,6 +297,19 @@ def create_app(db_path=None, tokens=None, mode=None):
             # PDF text may contain escaped NULs, which PostgreSQL JSON casts reject.
             # Decode the stored JSON in Python, preserving source text and drafts.
             return sorted((json.loads(r['payload']) for r in db.execute('SELECT payload FROM runs WHERE owner=? AND course_id=?', (identity, course_id))), key=lambda item: item['created_at'], reverse=True)
+
+    @app.get('/v1/courses/{course_id}/events', tags=['작업'], response_class=StreamingResponse,
+        responses={200: {'content': {'text/event-stream': {}}, 'description': 'runs.snapshot contains current runs on subscription and committed changes. stream.reconnect requests reconnection; stream.denied closes access. Heartbeat comments do not query the database.'}})
+    def course_events(course_id: str, credentials: HTTPAuthorizationCredentials = Depends(bearer), identity=Depends(owner)):
+        from .events import stream
+        def snapshot():
+            # Recheck revocation before every private snapshot, not just at connection time.
+            current = owner(credentials)
+            return runs(course_id, current)
+        with store.connect() as db:
+            owned(db, 'courses', course_id, identity)
+        return StreamingResponse(stream(store, course_id, snapshot), media_type='text/event-stream',
+            headers={'Cache-Control':'no-store', 'X-Accel-Buffering':'no'})
 
     @app.get('/v1/runs/{run_id}', response_model=Run, tags=['작업'])
     def run_detail(run_id: str, identity=Depends(owner)):
