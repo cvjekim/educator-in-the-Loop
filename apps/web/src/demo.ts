@@ -17,6 +17,7 @@ export function createDemoClient():Client {
     return {notebook:{nbformat:4,nbformat_minor:5,metadata:{},cells:[{id:'demo',cell_type:'markdown',metadata:{},source:['# 시연 노트북\n','실행하지 않은 합성 예시입니다.']}]},execution:'not_executed_demo'}
   }
   const api:Client={
+    subscribeRuns:async(c,signal,onRuns)=>{onRuns(copy(runs.filter(r=>r.course_id===c)));if(!signal.aborted)await new Promise<void>(resolve=>signal.addEventListener('abort',()=>resolve(),{once:true}))},
     invitations:async()=>[],invite:async()=>{throw new Error('실제 관리자 계정으로 연결하세요.')},revoke:async()=>{},
     me:async()=>({mode:'demo'}),courses:async()=>copy(courses),
     deleteCourse:async id=>{for(const list of [courses,documents,runs]){for(let i=list.length-1;i>=0;i--){const item=list[i] as {id:string;course_id?:string};if(item.id===id||item.course_id===id)list.splice(i,1)}}},

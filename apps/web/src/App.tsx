@@ -5,6 +5,7 @@ import {createClient,type Client,type Course,type Document,type Run,type RunInpu
 import DraftEditor from './DraftEditor'
 import SourceSearch from './SourceSearch'
 import Invitations from './Invitations'
+import {useRunEvents} from './useRunEvents'
 const configuredApi=import.meta.env.VITE_API_URL || ''
 
 const tasks=[{id:'lecture',name:'강의 노트',detail:'수업의 흐름이 보이는 강의 초안',icon:BookOpen},{id:'practice',name:'실습 노트북',detail:'기존 코드를 다듬고 실습을 준비',icon:Code2},{id:'exam',name:'시험·루브릭',detail:'평가 문항과 채점 기준을 함께',icon:FileText},{id:'project',name:'프로젝트 평가',detail:'학생의 기여를 살펴보는 피드백',icon:GraduationCap},{id:'manager',name:'학기 계획',detail:'한 학기의 준비를 체계적으로',icon:Layers3}] as const
@@ -53,8 +54,8 @@ function Workspace({api,admin,serverMode,onLogout}:{api:Client;admin:boolean;ser
   const pending=runs.filter(r=>r.status==='waiting_review').length
 
   useEffect(()=>{let cancelled=false;api.courses().then(cs=>{if(!cancelled){setCourses(cs);setCourseId(cs[0]?.id||'')}}).catch(e=>setError(e.message));return()=>{cancelled=true}},[api])
-  useEffect(()=>{if(!courseId){setDocuments([]);setRuns([]);return}let cancelled=false;setSelected([]);setActiveId('');Promise.all([api.documents(courseId),api.runs(courseId)]).then(([ds,rs])=>{if(!cancelled){setDocuments(ds);setSelected(ds.map(d=>d.id));setRuns(rs)}}).catch(e=>setError(e.message));return()=>{cancelled=true}},[api,courseId])
-  useEffect(()=>{if(!courseId)return;let cancelled=false;const timer=setInterval(()=>{api.runs(courseId).then(rs=>{if(!cancelled)setRuns(rs)}).catch(()=>{})},2000);return()=>{cancelled=true;clearInterval(timer)}},[api,courseId])
+  useEffect(()=>{if(!courseId){setDocuments([]);setRuns([]);return}let cancelled=false;setRuns([]);setDocuments([]);setSelected([]);setActiveId('');api.documents(courseId).then(ds=>{if(!cancelled){setDocuments(ds);setSelected(ds.map(d=>d.id))}}).catch(e=>setError(e.message));return()=>{cancelled=true}},[api,courseId])
+  const connectionError=useRunEvents(api,courseId,setRuns)
   useEffect(()=>{if(modal)dialog.current?.showModal();else dialog.current?.close()},[modal])
   async function act(fn:()=>Promise<void>){setBusy(true);setError('');setNotice('');try{await fn()}catch(e){setError(e instanceof Error?e.message:'처리 중 오류가 발생했습니다.')}finally{setBusy(false)}}
   const refresh=async()=>{if(courseId){setDocuments(await api.documents(courseId));setRuns(await api.runs(courseId))}}
@@ -76,6 +77,7 @@ function Workspace({api,admin,serverMode,onLogout}:{api:Client;admin:boolean;ser
     <div className="main-shell"><header className="topbar"><div className="breadcrumb">내 워크스페이스 <span>/</span> <strong>{tab==='materials'?'자료실':tab==='reviews'?'검토함':'강의 작업실'}</strong></div><span className="mode"><span className="dot"/>내 작업 공간</span></header>
     <main id="main">
       {serverMode==='demo'&&<div className="demo-banner">연결된 API가 demo 모드입니다. 데이터는 서버에 저장되지만 생성 결과는 합성 예시입니다.</div>}
+      {connectionError&&<div className="alert error" role="status">{connectionError}</div>}
       {error&&<div className="alert error" role="alert">{error}<button aria-label="오류 닫기" onClick={()=>setError('')}><X size={16}/></button></div>}
       {notice&&<div className="alert success" role="status">{notice}</div>}
       <div className="page-heading"><div><p className="eyebrow">YOUR TEACHING, THOUGHTFULLY PREPARED</p><h1>{tab==='materials'?'수업의 근거를 모으는 곳':tab==='reviews'?'교수자의 시선으로, 한 번 더':'이번 주 수업을 준비해 볼까요?'}</h1><p className="subtitle">{tab==='reviews'?'초안과 근거를 확인하고, 나의 수업에 맞게 다듬어 주세요.':'자료를 모으고, 초안을 만들고, 더 좋은 수업으로 이어가세요.'}</p></div><button className="button secondary" onClick={()=>setModal('course')}><Plus size={17}/>새 강의</button></div>

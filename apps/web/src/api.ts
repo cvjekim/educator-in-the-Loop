@@ -1,3 +1,4 @@
+import {readRunEvents} from './runEvents'
 export type TaskType = 'manager'|'lecture'|'practice'|'exam'|'project'
 export type Course = {id:string;title:string;syllabus:string;created_at:string}
 export type Document = {id:string;course_id:string;filename:string;size:number;pages:number;status:string}
@@ -5,6 +6,7 @@ export type Citation = {document_id:string;filename:string;page:number;text:stri
 export type Run = {id:string;course_id:string;task_type:TaskType;topic:string;status:string;revision:number;mode:'demo'|'real';draft:Record<string,unknown>|null;citations:Citation[];output:string|null;output_format:string;error:string|null;created_at:string;child_ids:string[]}
 export type RunInput = {task_type:TaskType;topic:string;week:number;guidelines:string;rubric_guidelines:string;document_ids:string[];parameters:{question_type:string;count:number}[];roster:{student_id:string;name:string;github_id:string;repo_name:string}[];execute_notebook:boolean;max_iterations:number}
 export type Client = {
+  subscribeRuns:(course:string,signal:AbortSignal,onRuns:(runs:Run[])=>void)=>Promise<void>
   me:()=>Promise<{mode:string;admin?:boolean}>
   invitations:()=>Promise<{id:string;created_at:string;revoked:boolean}[]>
   invite:()=>Promise<{id:string;token:string}>
@@ -36,6 +38,7 @@ export function createClient(base:string,token:string):Client {
   }
   const post=<T,>(path:string,body:unknown,headers?:Record<string,string>)=>request<T>(path,{method:'POST',body:JSON.stringify(body),headers})
   return {
+    subscribeRuns:(course,signal,onRuns)=>readRunEvents(base,token,course,signal,onRuns),
     invitations:()=>request('/v1/invitations'),invite:()=>post('/v1/invitations',{}),revoke:id=>request(`/v1/invitations/${id}`,{method:'DELETE'}),
     me:()=>request('/v1/me'),courses:()=>request('/v1/courses'),
     deleteCourse:id=>request(`/v1/courses/${id}`,{method:'DELETE'}),
