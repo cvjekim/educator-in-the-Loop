@@ -22,7 +22,7 @@ import re
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 
-from app import DraftOutline, LectureState
+from src.state_types import DraftOutline, LectureState
 
 # Both the node and app.py import this marker so the contract stays in one place.
 FEEDBACK_MARKER = "\n\n[교수 피드백]\n"

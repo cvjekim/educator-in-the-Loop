@@ -13,7 +13,7 @@ import tempfile
 import textwrap
 from pathlib import Path
 
-from app import ExecutionResult, PracticeState
+from src.state_types import ExecutionResult, PracticeState
 
 
 def _execute_cell(source: str) -> ExecutionResult:

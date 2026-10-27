@@ -7,3 +7,6 @@ httpx==0.28.1
 -r ../../practice-agent/requirements.txt
 -r ../../written-exam-agent/requirements.txt
 -r ../../project-exam-agent/requirements.txt
+
+psycopg[binary]==3.2.13
+vercel-queue==0.10.0

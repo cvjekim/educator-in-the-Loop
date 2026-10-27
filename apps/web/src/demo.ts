@@ -17,7 +17,11 @@ export function createDemoClient():Client {
     return {notebook:{nbformat:4,nbformat_minor:5,metadata:{},cells:[{id:'demo',cell_type:'markdown',metadata:{},source:['# 시연 노트북\n','실행하지 않은 합성 예시입니다.']}]},execution:'not_executed_demo'}
   }
   const api:Client={
+    invitations:async()=>[],invite:async()=>{throw new Error('실제 관리자 계정으로 연결하세요.')},revoke:async()=>{},
     me:async()=>({mode:'demo'}),courses:async()=>copy(courses),
+    deleteCourse:async id=>{for(const list of [courses,documents,runs]){for(let i=list.length-1;i>=0;i--){const item=list[i] as {id:string;course_id?:string};if(item.id===id||item.course_id===id)list.splice(i,1)}}},
+    search:async(c,query)=>({results:documents.filter(d=>d.course_id===c).map(d=>({document_id:d.id,filename:d.filename,page:1,text:`합성 검색 예시: ${query}. 실제 파일 본문을 검색하지 않습니다.`})),retrieval:'demo'}),
+    retry:async id=>{const r=get(id);r.status='waiting_review';r.error=null;return copy(r)},
     createCourse:async(title,syllabus)=>{const item={id:crypto.randomUUID(),title,syllabus,created_at:new Date().toISOString()};courses.unshift(item);return copy(item)},
     documents:async c=>copy(documents.filter(d=>d.course_id===c)),
     upload:async(c,file)=>{if(file.size>10_000_000)throw new Error('10MB 이하의 파일을 선택하세요.');if(!/\.(pdf|pptx|md|txt|ipynb)$/i.test(file.name))throw new Error('지원하는 파일 형식을 선택하세요.');const d={id:crypto.randomUUID(),course_id:c,filename:file.name,size:file.size,pages:1,status:'ready'};documents.push(d);return copy(d)},

@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import re
+import secrets
 import subprocess
 import sys
 import tempfile
@@ -19,8 +20,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from .models import Course, CourseCreate, Document, DraftUpdate, Error, FeedbackCreate, ReviewCreate, Run, RunCreate
-from .store import Store, pack, update_run
+from .models import Course, CourseCreate, Document, DraftUpdate, Error, FeedbackCreate, ReviewCreate, RetryCreate, SearchCreate, Run, RunCreate
+from .store import Store, pack, update_run, recover_expired
+from .queueing import schedule
+from . import retrieval
 
 ROOT = Path(__file__).resolve().parents[2]
 NAMES = {'manager': '학기 계획', 'lecture': '강의 노트', 'practice': '실습 노트북', 'exam': '시험·루브릭', 'project': '프로젝트 평가'}
@@ -35,9 +38,13 @@ def fail(status, code, message):
 
 
 def create_app(db_path=None, tokens=None, mode=None):
-    store = Store(db_path or os.getenv('API_DATABASE', str(ROOT / 'artifacts/api/service.sqlite3')))
+    store = Store(db_path or os.getenv('DATABASE_URL') or os.getenv('API_DATABASE', str(ROOT / 'artifacts/api/service.sqlite3')))
     access_tokens = tokens if tokens is not None else json.loads(os.getenv('API_ACCESS_TOKENS', '{}'))
     run_mode = mode or os.getenv('API_MODE', 'demo')
+    semantic = os.getenv('RAG_MODE', 'keyword') == 'hybrid'
+    upload_limit = 4_000_000 if os.getenv('VERCEL') else 10_000_000
+    if os.getenv('VERCEL') and (not access_tokens or any(len(token) < 32 for token in access_tokens)):
+        raise ValueError('Hosted API requires strong per-user access tokens')
     if run_mode not in ('demo', 'real'):
         raise ValueError('API_MODE must be demo or real')
 
@@ -49,12 +56,18 @@ def create_app(db_path=None, tokens=None, mode=None):
     app.add_middleware(CORSMiddleware, allow_origins=os.getenv('API_CORS_ORIGINS', 'http://localhost:5173,http://127.0.0.1:5173').split(','),
                        allow_methods=['GET', 'POST', 'PATCH', 'DELETE'], allow_headers=['Authorization', 'Content-Type', 'Idempotency-Key'])
     bearer = HTTPBearer(auto_error=False)
+    admin_ids = set(filter(None, os.getenv('API_ADMIN_IDS', '').split(',')))
 
     def owner(credentials: HTTPAuthorizationCredentials | None = Depends(bearer)):
         if credentials:
             for token, identity in access_tokens.items():
                 if hmac.compare_digest(credentials.credentials, token):
                     return identity
+            token_hash = hashlib.sha256(credentials.credentials.encode()).hexdigest()
+            with store.connect() as db:
+                invite = db.execute('SELECT identity FROM invitations WHERE token_hash=? AND revoked=0', (token_hash,)).fetchone()
+                if invite:
+                    return invite['identity']
         fail(401, 'unauthorized', '유효한 초대 토큰으로 연결해 주세요.')
 
     @app.exception_handler(HTTPException)
@@ -72,18 +85,64 @@ def create_app(db_path=None, tokens=None, mode=None):
             fail(404, 'not_found', '항목을 찾을 수 없습니다.')
         return row
 
+    @app.get('/', include_in_schema=False)
+    def root():
+        return {'service': 'educator-api', 'health': '/health', 'docs': '/docs'}
+
     @app.get('/health', tags=['운영'])
     def health():
         return {'status': 'ok', 'mode': run_mode}
 
+    @app.get('/ready', tags=['운영'])
+    def ready():
+        try:
+            with store.connect() as db:
+                db.execute('SELECT 1').fetchone()
+            if run_mode == 'real' and not os.getenv('OPENAI_API_KEY'):
+                raise RuntimeError('model unavailable')
+        except Exception:
+            return JSONResponse({'status': 'unavailable'}, status_code=503)
+        return {'status': 'ready', 'mode': run_mode}
+
     @app.get('/v1/me', tags=['인증'])
     def me(identity=Depends(owner)):
-        return {'id': identity, 'mode': run_mode}
+        return {'id': identity, 'mode': run_mode, 'admin': identity in admin_ids}
+
+    def administrator(identity=Depends(owner)):
+        if identity not in admin_ids:
+            fail(403, 'admin_required', '관리자만 초대를 관리할 수 있습니다.')
+        return identity
+
+    @app.get('/v1/invitations', tags=['인증'])
+    def invitations(identity=Depends(administrator)):
+        with store.connect() as db:
+            return [{**json.loads(row['payload']), 'revoked': bool(row['revoked'])} for row in db.execute('SELECT payload,revoked FROM invitations WHERE issuer=?', (identity,))]
+
+    @app.post('/v1/invitations', status_code=201, tags=['인증'], description='발급 즉시 한 번만 원문 토큰을 반환합니다. DB에는 SHA-256 해시만 저장합니다.')
+    def invite(identity=Depends(administrator)):
+        token = secrets.token_urlsafe(36)
+        item = {'id': str(uuid4()), 'created_at': now()}
+        with store.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            count = db.execute('SELECT COUNT(*) FROM invitations WHERE issuer=? AND revoked=0', (identity,)).fetchone()[0]
+            if count >= 100:
+                fail(409, 'invite_limit', '활성 초대는 최대 100개입니다.')
+            db.execute('INSERT INTO invitations (id,token_hash,identity,issuer,payload,revoked) VALUES (?,?,?,?,?,0)', (item['id'], hashlib.sha256(token.encode()).hexdigest(), str(uuid4()), identity, pack(item)))
+        return {**item, 'token': token}
+
+    @app.delete('/v1/invitations/{invitation_id}', status_code=204, tags=['인증'])
+    def revoke(invitation_id: str, identity=Depends(administrator)):
+        with store.connect() as db:
+            row = db.execute('SELECT id FROM invitations WHERE id=? AND issuer=?', (invitation_id, identity)).fetchone()
+            if not row:
+                fail(404, 'not_found', '초대를 찾을 수 없습니다.')
+            db.execute('UPDATE invitations SET revoked=1 WHERE id=? AND issuer=?', (invitation_id, identity))
+        return Response(status_code=204)
 
     @app.get('/v1/capabilities', tags=['에이전트'])
     def capabilities(identity=Depends(owner)):
         return {'mode': run_mode, 'agents': [{'id': k, 'name': v} for k, v in NAMES.items()],
-                'notebook_execution': bool(os.getenv('NOTEBOOK_SANDBOX_IMAGE')), 'retrieval': 'keyword', 'upload_limit_bytes': 10_000_000}
+                'notebook_execution': bool(os.getenv('NOTEBOOK_SANDBOX_IMAGE')), 'retrieval': 'hybrid' if semantic else 'keyword', 'upload_limit_bytes': upload_limit}
 
     @app.get('/v1/courses', response_model=list[Course], tags=['강의'])
     def courses(identity=Depends(owner)):
@@ -103,7 +162,7 @@ def create_app(db_path=None, tokens=None, mode=None):
             owned(db, 'courses', course_id, identity)
             return [json.loads(r['payload']) for r in db.execute('SELECT payload FROM documents WHERE owner=? AND course_id=?', (identity, course_id))]
 
-    @app.post('/v1/courses/{course_id}/documents', response_model=Document, status_code=201, tags=['자료'], description='PDF/PPTX/MD/TXT/IPYNB, 최대 10MB. 파싱은 제한시간이 있는 별도 프로세스에서 실행하며 notebook은 실행하지 않습니다.')
+    @app.post('/v1/courses/{course_id}/documents', response_model=Document, status_code=201, tags=['자료'], description='PDF/PPTX/MD/TXT/IPYNB, 로컬 최대 10MB / Vercel 최대 4MB. 파싱은 제한시간이 있는 별도 프로세스에서 실행하며 notebook은 실행하지 않습니다.')
     def upload(course_id: str, file: UploadFile = File(...), identity=Depends(owner)):
         with store.connect() as db:
             owned(db, 'courses', course_id, identity)
@@ -111,14 +170,14 @@ def create_app(db_path=None, tokens=None, mode=None):
         suffix = Path(name).suffix.lower()
         if suffix not in ('.pdf', '.pptx', '.md', '.txt', '.ipynb'):
             fail(415, 'unsupported_type', 'PDF, PPTX, MD, TXT, IPYNB 파일을 선택하세요.')
-        content = file.file.read(10_000_001)
-        if len(content) > 10_000_000:
-            fail(413, 'too_large', '파일 크기는 10MB 이하이어야 합니다.')
+        content = file.file.read(upload_limit + 1)
+        if len(content) > upload_limit:
+            fail(413, 'too_large', f'파일 크기는 {upload_limit // 1_000_000}MB 이하이어야 합니다.')
         with tempfile.TemporaryDirectory(prefix='educator-upload-') as folder:
             path = Path(folder) / ('input' + suffix)
             path.write_bytes(content)
             try:
-                env = {'PATH': os.environ.get('PATH', ''), 'PYTHONDONTWRITEBYTECODE': '1'}
+                env = {'PATH': os.environ.get('PATH', ''), 'PYTHONDONTWRITEBYTECODE': '1', 'PYTHONPATH': os.pathsep.join(sys.path)}
                 parsed = subprocess.run([sys.executable, str(ROOT / 'apps/api/parse_document.py'), str(path)],
                                         capture_output=True, timeout=30, text=True, env=env)
                 if parsed.returncode:
@@ -127,13 +186,36 @@ def create_app(db_path=None, tokens=None, mode=None):
             except subprocess.TimeoutExpired:
                 fail(422, 'parse_timeout', '파일 분석 제한 시간을 초과했습니다.')
         item = {'id': str(uuid4()), 'course_id': course_id, 'filename': name[:180], 'size': len(content), 'pages': len(data['pages']), 'status': 'ready'}
+        try:
+            data = retrieval.index_document(item['id'], data, semantic=semantic)
+        except Exception:
+            fail(503, 'index_failed', '검색 색인을 만들지 못했습니다. 잠시 후 다시 업로드하세요.')
         with store.connect() as db:
             db.execute('BEGIN IMMEDIATE')
+            owned(db, 'courses', course_id, identity)
             count = db.execute('SELECT COUNT(*) FROM documents WHERE owner=? AND course_id=?', (identity, course_id)).fetchone()[0]
             if count >= 50:
                 fail(409, 'document_limit', '강의당 최대 50개 자료를 저장할 수 있습니다.')
             db.execute('INSERT INTO documents VALUES (?,?,?,?,?)', (item['id'], identity, course_id, pack(item), pack(data)))
         return item
+
+    @app.post('/v1/courses/{course_id}/search', tags=['자료'])
+    def search_documents(course_id: str, body: SearchCreate, identity=Depends(owner)):
+        with store.connect() as db:
+            owned(db, 'courses', course_id, identity)
+            rows = db.execute('SELECT * FROM documents WHERE owner=? AND course_id=?', (identity, course_id)).fetchall()
+            if body.document_ids and not set(body.document_ids).issubset({row['id'] for row in rows}):
+                fail(404, 'not_found', '강의에 속한 자료가 아닙니다.')
+            records = [(json.loads(row['payload']), json.loads(row['content'])) for row in rows if not body.document_ids or row['id'] in body.document_ids]
+        try:
+            results = retrieval.search(records, body.query, body.limit, semantic=semantic)
+        except Exception:
+            fail(503, 'search_unavailable', '검색 서비스에 연결할 수 없습니다.')
+        # Recheck after the external embedding request, so concurrently deleted documents cannot leak.
+        with store.connect() as db:
+            owned(db, 'courses', course_id, identity)
+            live = {row['id'] for row in db.execute('SELECT id FROM documents WHERE owner=? AND course_id=?', (identity, course_id))}
+        return {'results': [c for c in results if c['document_id'] in live], 'retrieval': 'hybrid' if semantic else 'keyword'}
 
     @app.delete('/v1/documents/{document_id}', status_code=204, tags=['자료'], description='연관 작업의 자료 snapshot과 산출물도 제거합니다. 실행 중인 작업은 먼저 취소하세요.')
     def delete_document(document_id: str, identity=Depends(owner)):
@@ -151,10 +233,11 @@ def create_app(db_path=None, tokens=None, mode=None):
                 run = json.loads(row['payload'])
                 run.update(status='cancelled', draft=None, output=None, citations=[], reviews=[], error='source_deleted')
                 update_run(db, run, {})
+                db.execute('DELETE FROM feedback WHERE owner=? AND run_id=?', (identity, run['id']))
             db.execute('DELETE FROM documents WHERE id=? AND owner=?', (document_id, identity))
         return Response(status_code=204)
 
-    def enqueue(db, course_id, body, identity, key):
+    def enqueue(db, course_id, body, identity, key, query_vector=None):
         course = json.loads(owned(db, 'courses', course_id, identity)['payload'])
         fingerprint = hashlib.sha256(pack(body.model_dump()).encode()).hexdigest()
         prior = db.execute('SELECT * FROM runs WHERE owner=? AND course_id=? AND idempotency_key=?', (identity, course_id, key)).fetchone()
@@ -167,7 +250,7 @@ def create_app(db_path=None, tokens=None, mode=None):
         count = db.execute("SELECT COUNT(*) FROM runs WHERE owner=? AND status IN ('queued','running')", (identity,)).fetchone()[0]
         if count >= 5:
             fail(429, 'run_limit', '동시에 최대 5개 작업을 실행할 수 있습니다.')
-        citations, notebook = [], None
+        citations, notebook, records = [], None, []
         for doc_id in body.document_ids:
             row = owned(db, 'documents', doc_id, identity)
             if row['course_id'] != course_id:
@@ -175,12 +258,8 @@ def create_app(db_path=None, tokens=None, mode=None):
             meta, data = json.loads(row['payload']), json.loads(row['content'])
             if 'notebook' in data:
                 notebook = data['notebook']
-            for page, text in enumerate(data['pages'], 1):
-                for offset in range(0, len(text), 1200):
-                    citations.append({'document_id': doc_id, 'filename': meta['filename'], 'page': page, 'text': text[offset:offset + 1400]})
-        terms = re.findall(r'\w+', body.topic.lower())
-        citations.sort(key=lambda c: sum(c['text'].lower().count(t) for t in terms), reverse=True)
-        citations = citations[:12]
+            records.append((meta, data))
+        citations = retrieval.search(records, body.topic, query_vector=query_vector)
         if body.task_type in ('lecture', 'exam') and not citations:
             fail(422, 'source_required', '강의 자료를 먼저 업로드하고 선택하세요.')
         if body.task_type == 'practice' and notebook is None:
@@ -192,20 +271,29 @@ def create_app(db_path=None, tokens=None, mode=None):
         run = {'id': str(uuid4()), 'course_id': course_id, 'task_type': body.task_type, 'topic': body.topic, 'status': 'queued',
                'revision': 1, 'mode': run_mode, 'draft': None, 'citations': citations, 'output': None, 'error': None,
                'output_format': 'ipynb' if body.task_type == 'practice' else 'md', 'created_at': now(), 'reviews': [], 'child_ids': []}
-        state = {'request': body.model_dump(), 'syllabus': course['syllabus'], 'raw_context': '\n\n'.join(c['text'] for c in citations), 'notebook': notebook, 'phase': 'draft'}
+        state = {'request': body.model_dump(), 'syllabus': course['syllabus'], 'raw_context': '\n\n'.join('[SOURCE '+str(c.get('chunk_id',''))+' page '+str(c['page'])+']\n'+c['text']+'\n[/SOURCE]' for c in citations), 'notebook': notebook, 'phase': 'draft'}
         db.execute('INSERT INTO runs VALUES (?,?,?,?,?,?,?,?)', (run['id'], identity, course_id, 'queued', pack(run), pack(state), fingerprint, key))
         return run
 
     @app.post('/v1/courses/{course_id}/runs', response_model=Run, status_code=202, tags=['작업'])
     def create_run(course_id: str, body: RunCreate, idempotency_key: str = Header(min_length=8, max_length=128), identity=Depends(owner)):
         with store.connect() as db:
+            owned(db, 'courses', course_id, identity)
+        try:
+            query_vector = retrieval.embed([body.topic])[0] if semantic and body.document_ids else None
+        except Exception:
+            fail(503, 'search_unavailable', '검색 서비스에 연결할 수 없습니다.')
+        with store.connect() as db:
             db.execute('BEGIN IMMEDIATE')
-            return enqueue(db, course_id, body, identity, idempotency_key)
+            run = enqueue(db, course_id, body, identity, idempotency_key, query_vector)
+        return schedule(store, run)
 
     @app.get('/v1/courses/{course_id}/runs', response_model=list[Run], tags=['작업'])
     def runs(course_id: str, identity=Depends(owner)):
         with store.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
             owned(db, 'courses', course_id, identity)
+            recover_expired(db, identity, course_id)
             return [json.loads(r['payload']) for r in db.execute('SELECT payload FROM runs WHERE owner=? AND course_id=? ORDER BY rowid DESC', (identity, course_id))]
 
     @app.get('/v1/runs/{run_id}', response_model=Run, tags=['작업'])
@@ -232,7 +320,7 @@ def create_app(db_path=None, tokens=None, mode=None):
                 state['phase'] = 'finalize'
             run['status'] = 'queued'
             update_run(db, run, state)
-            return run
+        return schedule(store, run)
 
     @app.patch('/v1/runs/{run_id}/draft', response_model=Run, tags=['검토'], description='교수자가 초안을 직접 편집합니다. 버전이 증가하며 재승인이 필요합니다. 식별자와 구조를 임의로 변경할 수 없습니다.')
     def edit_draft(run_id: str, body: DraftUpdate, identity=Depends(owner)):
@@ -300,7 +388,7 @@ def create_app(db_path=None, tokens=None, mode=None):
                 children.append(enqueue(db, row['course_id'], request, identity, f'{run_id}:dispatch:{index}'))
             parent['child_ids'] = [c['id'] for c in children]
             update_run(db, parent, state)
-            return children
+        return [schedule(store, child) for child in children]
 
     @app.get('/v1/runs/{run_id}/artifact', tags=['산출물'], response_class=Response,
              responses={200: {'content': {'text/markdown': {}, 'application/x-ipynb+json': {}}}}, description='승인된 최종 산출물만 다운로드. 초안은 409.')
@@ -312,6 +400,38 @@ def create_app(db_path=None, tokens=None, mode=None):
         fmt = run['output_format']
         return Response(run['output'], media_type='application/x-ipynb+json' if fmt == 'ipynb' else 'text/markdown',
                         headers={'Content-Disposition': f'attachment; filename="{run_id}.{fmt}"'})
+
+    @app.post('/v1/runs/{run_id}/retries', response_model=Run, status_code=202, tags=['작업'])
+    def retry_run(run_id: str, body: RetryCreate, identity=Depends(owner)):
+        with store.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            row = owned(db, 'runs', run_id, identity)
+            run, state = json.loads(row['payload']), json.loads(row['state'])
+            if run['revision'] != body.expected_revision or run['status'] not in ('failed', 'queued'):
+                fail(409, 'retry_conflict', '실패하거나 전달 대기 중인 최신 작업만 재시도할 수 있습니다.')
+            if not state.get('request'):
+                fail(409, 'source_deleted', '자료가 삭제된 작업입니다.')
+            if run['status'] == 'failed':
+                state['attempt'] = state.get('attempt', 0) + 1
+                if state['attempt'] > 3:
+                    fail(409, 'retry_limit', '최대 재시도 횟수에 도달했습니다.')
+            run.update(status='queued', error=None)
+            update_run(db, run, state)
+        return schedule(store, run)
+
+    @app.delete('/v1/courses/{course_id}', status_code=204, tags=['강의'])
+    def delete_course(course_id: str, identity=Depends(owner)):
+        with store.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            owned(db, 'courses', course_id, identity)
+            active = db.execute("SELECT id FROM runs WHERE owner=? AND course_id=? AND status IN ('running','queued')", (identity, course_id)).fetchone()
+            if active:
+                fail(409, 'active_run', '진행 중인 작업을 먼저 취소하세요.')
+            db.execute('DELETE FROM feedback WHERE owner=? AND run_id IN (SELECT id FROM runs WHERE owner=? AND course_id=?)', (identity, identity, course_id))
+            db.execute('DELETE FROM runs WHERE owner=? AND course_id=?', (identity, course_id))
+            db.execute('DELETE FROM documents WHERE owner=? AND course_id=?', (identity, course_id))
+            db.execute('DELETE FROM courses WHERE id=? AND owner=?', (course_id, identity))
+        return Response(status_code=204)
 
     @app.post('/v1/runs/{run_id}/feedback', status_code=201, tags=['피드백'])
     def feedback(run_id: str, body: FeedbackCreate, identity=Depends(owner)):

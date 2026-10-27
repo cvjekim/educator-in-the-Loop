@@ -52,6 +52,7 @@ class RunCreate(InputModel):
 
 
 class Citation(BaseModel):
+    chunk_id: str | None = None
     document_id: str
     filename: str
     page: int
@@ -111,3 +112,13 @@ class Error(BaseModel):
     code: str
     message: str
     request_id: str
+
+
+class RetryCreate(InputModel):
+    expected_revision: int = Field(ge=1)
+
+
+class SearchCreate(InputModel):
+    query: str = Field(min_length=1, max_length=500)
+    document_ids: list[str] = Field(default_factory=list, max_length=50)
+    limit: int = Field(default=8, ge=1, le=12)

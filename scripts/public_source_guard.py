@@ -4,7 +4,7 @@ import re
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
-ALLOWED_ROOT = {'.gitignore', '.dockerignore', '.env.example', 'compose.yaml', 'LICENSE'}
+ALLOWED_ROOT = {'.gitignore', '.dockerignore', '.env.example', 'compose.yaml', 'pyproject.toml', 'vercel.json', 'LICENSE'}
 ALLOWED_TREES = {'apps', 'tests', 'scripts', '.github', 'manager-agent', 'lecture-note-agent', 'practice-agent', 'written-exam-agent', 'project-exam-agent'}
 SOURCE_EXTENSIONS = {'.py', '.json', '.yaml', '.yml', '.ts', '.tsx', '.css', '.html', '.mjs'}
 PRIVATE_PARTS = {'data', 'materials', 'uploads', 'evaluation', 'experiments', 'subjects', 'paper', 'papers', 'docs', 'skills', 'research-private', 'artifacts', 'node_modules', 'dist', '__pycache__', '.vercel'}

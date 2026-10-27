@@ -12,7 +12,7 @@ from .store import Store, pack, update_run
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def process_once(store, runner=None):
+def process_once(store, runner=None, run_id=None):
     with store.connect() as db:
         db.execute('BEGIN IMMEDIATE')
         # Recover work abandoned by a dead worker; do not repeat paid model calls.
@@ -22,7 +22,8 @@ def process_once(store, runner=None):
                 run = json.loads(row['payload'])
                 run.update(status='failed', error='worker_interrupted')
                 update_run(db, run, state)
-        row = db.execute("SELECT * FROM runs WHERE status='queued' ORDER BY rowid LIMIT 1").fetchone()
+        row = (db.execute("SELECT * FROM runs WHERE status='queued' AND id=?", (run_id,)).fetchone() if run_id else
+               db.execute("SELECT * FROM runs WHERE status='queued' ORDER BY rowid LIMIT 1").fetchone())
         if not row:
             return False
         run, state = json.loads(row['payload']), json.loads(row['state'])
@@ -35,7 +36,7 @@ def process_once(store, runner=None):
             result = runner(data)
         else:
             env = {k: v for k, v in os.environ.items() if k in ('PATH', 'HOME', 'SYSTEMROOT', 'OPENAI_API_KEY', 'GITHUB_TOKEN', 'NOTEBOOK_SANDBOX_IMAGE')}
-            env.update(PYTHON_DOTENV_DISABLED='1', PYTHONDONTWRITEBYTECODE='1', LANGSMITH_TRACING='false', LANGCHAIN_TRACING_V2='false')
+            env.update(PYTHONPATH=os.pathsep.join(sys.path), PYTHON_DOTENV_DISABLED='1', PYTHONDONTWRITEBYTECODE='1', LANGSMITH_TRACING='false', LANGCHAIN_TRACING_V2='false')
             proc = subprocess.Popen([sys.executable, str(ROOT / 'apps/api/legacy_runner.py')], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
             started = time.monotonic()
             initial = pack(data)
@@ -47,7 +48,7 @@ def process_once(store, runner=None):
                     initial = None
                     with store.connect() as db:
                         current = db.execute('SELECT status FROM runs WHERE id=?', (run['id'],)).fetchone()
-                    if current['status'] == 'cancelled' or time.monotonic() - started > 300:
+                    if not current or current['status'] == 'cancelled' or time.monotonic() - started > int(os.getenv('AGENT_TIMEOUT_SECONDS', '240')):
                         proc.terminate()
                         try:
                             proc.communicate(timeout=12)
@@ -80,7 +81,7 @@ def process_once(store, runner=None):
 if __name__ == '__main__':
     from dotenv import load_dotenv
     load_dotenv(ROOT / '.env')
-    store = Store(os.getenv('API_DATABASE', str(ROOT / 'artifacts/api/service.sqlite3')))
+    store = Store(os.getenv('DATABASE_URL') or os.getenv('API_DATABASE', str(ROOT / 'artifacts/api/service.sqlite3')))
     print('Educator worker ready', flush=True)
     while True:
         if not process_once(store):

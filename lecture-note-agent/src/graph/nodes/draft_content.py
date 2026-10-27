@@ -10,7 +10,7 @@ from __future__ import annotations
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 
-from app import DraftOutline, LectureState
+from src.state_types import DraftOutline, LectureState
 from src.trends.archive import select_trends_for_topic
 
 _llm: ChatOpenAI | None = None

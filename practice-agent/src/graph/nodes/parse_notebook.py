@@ -3,7 +3,7 @@ Node: parse_notebook
 Loads the .ipynb file and splits cells into code_cells and markdown_cells.
 """
 
-from app import PracticeState
+from src.state_types import PracticeState
 from src.notebook.loader import load_notebook, split_cells
 
 

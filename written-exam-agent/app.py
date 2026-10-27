@@ -14,6 +14,7 @@ from typing import Optional
 
 import pandas as pd
 import streamlit as st
+from src.state_types import QuestionParam, ExamState
 from dotenv import load_dotenv
 from typing_extensions import TypedDict
 
@@ -22,21 +23,8 @@ load_dotenv()
 
 # ─── State Definition ────────────────────────────────────────────────────────
 
-class QuestionParam(TypedDict):
-    """A single question-type configuration."""
-    question_type: str   # "single_choice" | "short_answer" | "open_answer"
-    count: int
 
 
-class ExamState(TypedDict):
-    """Full state carried through the LangGraph pipeline."""
-    subject_name:  str
-    parameters:    list[QuestionParam]
-    questions:     list[dict]
-    rubrics:       list[dict]
-    final_output:  Optional[dict]
-    review_status: str    # "pending" | "approved" | "needs_revision"
-    feedback:      str
 
 
 # ─── Constants ───────────────────────────────────────────────────────────────

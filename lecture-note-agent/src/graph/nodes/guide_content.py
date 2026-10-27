@@ -14,7 +14,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from app import LectureState
+from src.state_types import LectureState
 
 # Matches "N주차:" or "N주차：" (full-width colon) at any indent
 _WEEK_HEADER_RE = re.compile(r"(\d+)주차\s*[:：]")

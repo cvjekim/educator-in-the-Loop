@@ -13,7 +13,7 @@ from __future__ import annotations
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, StateGraph
 
-from app import PracticeState
+from src.state_types import PracticeState
 from src.graph.nodes.parse_notebook import parse_notebook
 from src.graph.nodes.revise_code import revise_code
 from src.graph.nodes.self_reflect import self_reflect

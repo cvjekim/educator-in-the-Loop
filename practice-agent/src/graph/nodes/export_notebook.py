@@ -10,7 +10,7 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 
-from app import PracticeState
+from src.state_types import PracticeState
 
 
 def export_notebook(state: PracticeState) -> dict:

@@ -12,7 +12,7 @@ from __future__ import annotations
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, StateGraph
 
-from app import ProjectState
+from src.state_types import ProjectState
 from src.graph.nodes.init_rubric import init_rubric
 from src.graph.nodes.crawl_github import crawl_github
 from src.graph.nodes.summarize_project import summarize_project

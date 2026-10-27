@@ -12,7 +12,7 @@ from __future__ import annotations
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, StateGraph
 
-from app import ExamState
+from src.state_types import ExamState
 from src.graph.nodes.generate_questions import generate_questions
 from src.graph.nodes.draft_rubric import draft_rubric
 from src.graph.nodes.human_review import human_review

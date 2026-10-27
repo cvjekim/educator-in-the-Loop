@@ -5,8 +5,14 @@ export type Citation = {document_id:string;filename:string;page:number;text:stri
 export type Run = {id:string;course_id:string;task_type:TaskType;topic:string;status:string;revision:number;mode:'demo'|'real';draft:Record<string,unknown>|null;citations:Citation[];output:string|null;output_format:string;error:string|null;created_at:string;child_ids:string[]}
 export type RunInput = {task_type:TaskType;topic:string;week:number;guidelines:string;rubric_guidelines:string;document_ids:string[];parameters:{question_type:string;count:number}[];roster:{student_id:string;name:string;github_id:string;repo_name:string}[];execute_notebook:boolean;max_iterations:number}
 export type Client = {
-  me:()=>Promise<{mode:string}>
+  me:()=>Promise<{mode:string;admin?:boolean}>
+  invitations:()=>Promise<{id:string;created_at:string;revoked:boolean}[]>
+  invite:()=>Promise<{id:string;token:string}>
+  revoke:(id:string)=>Promise<void>
   courses:()=>Promise<Course[]>
+  deleteCourse:(id:string)=>Promise<void>
+  search:(course:string,query:string)=>Promise<{results:Citation[];retrieval:string}>
+  retry:(id:string,revision:number)=>Promise<Run>
   createCourse:(title:string,syllabus:string)=>Promise<Course>
   documents:(course:string)=>Promise<Document[]>
   upload:(course:string,file:File)=>Promise<Document>
@@ -30,7 +36,11 @@ export function createClient(base:string,token:string):Client {
   }
   const post=<T,>(path:string,body:unknown,headers?:Record<string,string>)=>request<T>(path,{method:'POST',body:JSON.stringify(body),headers})
   return {
+    invitations:()=>request('/v1/invitations'),invite:()=>post('/v1/invitations',{}),revoke:id=>request(`/v1/invitations/${id}`,{method:'DELETE'}),
     me:()=>request('/v1/me'),courses:()=>request('/v1/courses'),
+    deleteCourse:id=>request(`/v1/courses/${id}`,{method:'DELETE'}),
+    search:(course,query)=>post(`/v1/courses/${course}/search`,{query}),
+    retry:(id,revision)=>post(`/v1/runs/${id}/retries`,{expected_revision:revision}),
     createCourse:(title,syllabus)=>post('/v1/courses',{title,syllabus}),
     documents:c=>request(`/v1/courses/${c}/documents`),
     upload:(c,file)=>{const body=new FormData();body.append('file',file);return request(`/v1/courses/${c}/documents`,{method:'POST',body})},

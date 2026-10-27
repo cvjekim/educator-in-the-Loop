@@ -4,7 +4,7 @@ Reads subject configuration and extracts text from PPTs/PDFs.
 Populates state["raw_context"] exclusively from reference materials.
 """
 
-from app import LectureState
+from src.state_types import LectureState
 from src.context.loader import load_subject_context
 
 

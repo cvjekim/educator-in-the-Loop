@@ -6,7 +6,7 @@ then serialises to a temporary .ipynb path (does NOT overwrite the source file).
 
 from __future__ import annotations
 
-from app import PracticeState
+from src.state_types import PracticeState
 from src.notebook.loader import load_notebook, assemble_and_save
 
 

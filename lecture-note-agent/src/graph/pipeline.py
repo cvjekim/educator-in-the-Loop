@@ -10,7 +10,7 @@ Nodes (in order):
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import StateGraph, END
 
-from app import LectureState
+from src.state_types import LectureState
 from src.graph.nodes.guide_content import guide_content
 from src.graph.nodes.load_context import load_context
 from src.graph.nodes.draft_content import draft_content

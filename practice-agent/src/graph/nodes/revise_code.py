@@ -15,7 +15,7 @@ from langchain_openai import ChatOpenAI
 load_dotenv()
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from app import PracticeState, NotebookCell
+from src.state_types import PracticeState, NotebookCell
 
 _PROMPT_PATH = Path(__file__).parents[3] / "prompts" / "revise_code.md"
 _system_prompt = _PROMPT_PATH.read_text(encoding="utf-8")

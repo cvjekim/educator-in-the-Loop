@@ -5,7 +5,7 @@ The Streamlit UI reads state["output_path"], renders the notebook preview,
 and updates review_status to 'approved' or 'rejected' before resuming the graph.
 """
 
-from app import PracticeState
+from src.state_types import PracticeState
 
 
 def human_review(state: PracticeState) -> dict:

@@ -27,7 +27,7 @@ import requests
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 
-from app import DraftOutline, LectureState
+from src.state_types import DraftOutline, LectureState
 
 # ── Tuning constants ──────────────────────────────────────────────────────────
 _MIN_CONTEXT_CHARS = 300   # fewer chars from PDF/PPT → trigger web search

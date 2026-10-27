@@ -11,7 +11,7 @@ from typing import List, Tuple
 
 import nbformat
 
-from app import NotebookCell
+from src.state_types import NotebookCell
 
 
 def load_notebook(path: str) -> nbformat.NotebookNode:

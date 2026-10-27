@@ -38,7 +38,7 @@ from datetime import date
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 
-from app import LectureState
+from src.state_types import LectureState
 
 _llm: ChatOpenAI | None = None
 
