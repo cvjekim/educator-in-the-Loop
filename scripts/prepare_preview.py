@@ -39,7 +39,7 @@ def prepare(target, root=ROOT):
         (static / "index.html").write_text(DEMO)
     else:
         shutil.copytree(source, static, dirs_exist_ok=True)
-    config = {"version": 3, "routes": [{"handle": "filesystem"},
+    config = {"version": 3, "routes": [{"src": "/.*", "headers": {"Cross-Origin-Opener-Policy": "same-origin-allow-popups", "X-Content-Type-Options": "nosniff", "Referrer-Policy": "strict-origin-when-cross-origin"}, "continue": True}, {"handle": "filesystem"},
                                       {"src": "/.*", "dest": "/index.html"}]}
     (output / "config.json").write_text(json.dumps(config, indent=2) + "\n")
     return staging

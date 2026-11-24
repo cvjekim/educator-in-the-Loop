@@ -21,6 +21,13 @@ rubrics=[{'question_number':1,'question_type':'short_answer','total_points':5,'c
 class FakeLLM:
     def __init__(self,*args,**kwargs):
         pass
+    def with_structured_output(self,schema):
+        def invoke(messages):
+            calls.append(messages)
+            return schema.model_validate({'title':'합성 실습','objectives':['개념: 이해','결과: 확인'],'summary':['입력: 상수','출력: 숫자'],
+                'steps':[{'title':str(i),'concepts':['상수: 숫자','출력: print'],'procedure':['입력: 1','실행: 출력'],
+                'code':'print(1)','interpretation':['예상값: 1','확인: 출력 비교']} for i in range(3)]})
+        return SimpleNamespace(invoke=invoke)
     def invoke(self,messages):
         calls.append(messages)
         if kind=='manager':
@@ -46,10 +53,15 @@ with patch('langchain_openai.ChatOpenAI',FakeLLM),patch('requests.get',fake_get)
     from apps.api.models import RunCreate
     import nbformat
     request=RunCreate(task_type=kind,topic='개념',document_ids=['synthetic'],rubric_guidelines='기여도',roster=[{'student_id':'s1','name':'학생','github_id':'example','repo_name':'demo'}]).model_dump()
+    if kind=='exam':request['parameters']=[{'question_type':'short_answer','count':1}]
     data={'request':request,'syllabus':'1주차 개념','raw_context':'개념에 대한 합성 강의 자료입니다. '*100,'phase':'draft','notebook':json.loads(nbformat.writes(nbformat.v4.new_notebook(cells=[nbformat.v4.new_code_cell('print(1)')])))}
     os.chdir(cwd)
     draft=run_real(data)
     assert draft['draft'] and calls
+    if kind=='exam':
+        for q in draft['draft']['questions']:
+            q.update(learningObjective='개념 이해',bloomLevel='understand',expectedDifficulty='medium')
+            draft['draft']['itemReviews'][str(q['number'])]={'decision':'accept','checks':{k:True for k in ('alignment','cognitiveLevel','answerClarity','rubricClarity')}}
     result=run_real({**data,'draft':draft['draft'],'phase':'finalize'})
     assert result['output']
     if kind=='practice':

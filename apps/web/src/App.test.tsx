@@ -12,16 +12,18 @@ describe('교수자 작업 흐름',()=>{
     expect(screen.queryByRole('button',{name:'시연 모드로 돌아가기'})).not.toBeInTheDocument()
   })
   it('인증 실패 시 로그인 화면을 유지하고 시연으로 전환하지 않는다',async()=>{
+    vi.stubEnv('VITE_LEGACY_LOGIN','true')
     const user=userEvent.setup()
-    const fetch=vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response(JSON.stringify({message:'인증 실패'}),{status:401}))
+    const fetch=vi.spyOn(globalThis,'fetch').mockImplementation(async input=>String(input).endsWith('/auth/config')?new Response(JSON.stringify({googleClientId:''})):new Response(JSON.stringify({message:'인증 실패'}),{status:401}))
     try{
       render(<App/>)
+      await user.click(screen.getByText('기존 초대 토큰으로 로그인'))
       await user.type(screen.getByLabelText('교수자 초대 토큰'),'invalid-token')
       await user.click(screen.getByRole('button',{name:'로그인'}))
-      await screen.findByRole('alert')
+      expect(await screen.findByText('인증 실패')).toHaveAttribute('role','alert')
       expect(screen.getByRole('heading',{name:'교수자 로그인'})).toBeInTheDocument()
       expect(screen.queryByRole('button',{name:'새 강의'})).not.toBeInTheDocument()
-    }finally{fetch.mockRestore()}
+    }finally{fetch.mockRestore();vi.unstubAllEnvs()}
   })
   it('로그아웃하면 작업 공간을 닫는다',async()=>{
     const user=userEvent.setup();render(<App initial={createDemoClient()}/>)

@@ -62,7 +62,9 @@ jobs:
           DEPLOY_ENVIRONMENT: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && 'production' || 'preview' }}
         run: |
           test -n "$VERCEL_TOKEN" && test -n "$VERCEL_ORG_ID" && test -n "$VERCEL_PROJECT_ID"
-          if ! vercel deploy --prebuilt --yes --json --verify --environment "$DEPLOY_ENVIRONMENT" --cwd artifacts/preview --token "$VERCEL_TOKEN" > artifacts/deploy-result.json 2> artifacts/deploy-private.log; then
+          mkdir -p "$RUNNER_TEMP/educator-web"
+          cp -R artifacts/preview/. "$RUNNER_TEMP/educator-web/"
+          if ! vercel deploy --prebuilt --yes --json --verify --environment "$DEPLOY_ENVIRONMENT" --cwd "$RUNNER_TEMP/educator-web" --token "$VERCEL_TOKEN" > artifacts/deploy-result.json 2> artifacts/deploy-private.log; then
             echo "::error::Vercel deployment failed; inspect the deployment in the connected Vercel project."
             exit 1
           fi

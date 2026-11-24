@@ -38,7 +38,7 @@ async def listen(store, course_id):
         dsn = (os.getenv('DATABASE_URL_UNPOOLED') or store.dsn) if store.dsn == os.getenv('DATABASE_URL') else store.dsn
         conn = await psycopg.AsyncConnection.connect(dsn, autocommit=True, connect_timeout=10)
         try:
-            channel = 'course_' + hashlib.md5(course_id.encode()).hexdigest()
+            channel = getattr(store, 'event_prefix', 'course_') + hashlib.md5(course_id.encode()).hexdigest()
             await conn.execute(psycopg.sql.SQL('LISTEN {}').format(psycopg.sql.Identifier(channel)))
             await conn.execute('LISTEN educator_access')
             async def wait():

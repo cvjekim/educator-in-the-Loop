@@ -35,7 +35,7 @@ def process_once(store, runner=None, run_id=None):
         if runner:
             result = runner(data)
         else:
-            env = {k: v for k, v in os.environ.items() if k in ('PATH', 'HOME', 'SYSTEMROOT', 'OPENAI_API_KEY', 'GITHUB_TOKEN', 'NOTEBOOK_SANDBOX_IMAGE')}
+            env = {k: v for k, v in os.environ.items() if k in ('PATH', 'HOME', 'SYSTEMROOT', 'OPENAI_API_KEY', 'GITHUB_TOKEN', 'TAVILY_API_KEY',  'NOTEBOOK_SANDBOX_IMAGE')}
             env.update(PYTHONPATH=os.pathsep.join(sys.path), PYTHON_DOTENV_DISABLED='1', PYTHONDONTWRITEBYTECODE='1', LANGSMITH_TRACING='false', LANGCHAIN_TRACING_V2='false')
             proc = subprocess.Popen([sys.executable, str(ROOT / 'apps/api/legacy_runner.py')], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
             started = time.monotonic()

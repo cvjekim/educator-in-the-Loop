@@ -1,7 +1,7 @@
 import type {Run} from './api'
 
 const names:Record<string,string>={intro_slide:'도입 슬라이드',main_slides:'본론 슬라이드',content:'문항',model_answer:'모범 답안',description:'평가 기준',overall_feedback:'종합 의견',summary:'요약',source:'셀 내용',context:'작업 내용',subject:'과목',feedback_items:'항목별 피드백',criteria:'채점 기준',questions:'문항',rubrics:'루브릭',evaluations:'학생별 평가',notebook:'노트북',cells:'셀',tasks:'계획',keywords:'핵심어'}
-const protectedFields=new Set(['student_id','name','number','question_number','task_type','question_type','cell_type','id','notice','execution','iterations','guidelines','revision_note'])
+const protectedFields=new Set(['reviewSummary','reviewSchemaVersion','trend_references','trend_search','student_id','name','number','question_number','task_type','question_type','cell_type','id','notice','execution','iterations','guidelines','revision_note'])
 
 export default function DraftEditor({value,onChange}:{value:NonNullable<Run['draft']>;onChange:(value:NonNullable<Run['draft']>)=>void}){
   function change(path:(string|number)[],text:string){const next=structuredClone(value);let node:unknown=next;for(const key of path.slice(0,-1))node=(node as Record<string|number,unknown>)[key];(node as Record<string|number,unknown>)[path[path.length-1]]=text;onChange(next)}

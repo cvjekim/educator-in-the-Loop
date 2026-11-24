@@ -94,14 +94,9 @@ def format_output(state: LectureState) -> LectureState:
             "status_message": "생성할 내용이 없습니다.",
         }
 
-    sections = _parse_sections(draft)
-
-    parts: list[str] = [_build_doc_header(state)]
-
-    for title, body in sections:
-        parts.append(_format_section(title, body, state.get("guidelines", "")))
-
-    final_md = "\n\n---\n\n".join(parts)
+    # The approved outline has already been expanded into student-facing content.
+    # Preserve it verbatim: another summarization pass discarded detail and citations.
+    final_md = _build_doc_header(state) + "\n\n---\n\n" + draft.strip()
 
     return {
         **state,
@@ -116,7 +111,7 @@ def format_output(state: LectureState) -> LectureState:
 
 def _build_doc_header(state: LectureState) -> str:
     today = date.today().strftime("%Y-%m-%d")
-    subject_display = state.get("subject", "").replace("-", " ").title()
+    subject_display = state.get("subject_name") or state.get("subject", "").replace("-", " ").title()
     week = state.get("week", "")
     topic = state.get("topic", "")
     return (

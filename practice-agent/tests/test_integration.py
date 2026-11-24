@@ -131,3 +131,24 @@ def test_graph_resumes_after_approval(initial_state, tmp_path, monkeypatch):
 
     assert final.get("overall_progress") == 100
     assert (tmp_path / final["output_path"]).is_file()
+
+
+def test_reflection_preserves_variables_between_cells(initial_state):
+    from src.graph.nodes.self_reflect import self_reflect
+    cells=[{'index':0,'source':'value = 42','cell_type':'code'}, {'index':2,'source':'assert value == 42','cell_type':'code'}]
+    result=self_reflect({**initial_state,'revised_cells':cells})
+    assert result['code_quality']=='pass'
+    cells[1]['source']='raise ValueError("synthetic failure")'
+    result=self_reflect({**initial_state,'revised_cells':cells})
+    assert result['execution_result']['cell_index']==2
+    assert 'synthetic failure' in result['execution_result']['traceback']
+
+
+def test_revision_receives_traceback_and_prior_cells(initial_state,monkeypatch):
+    import importlib
+    module=importlib.import_module('src.graph.nodes.revise_code')
+    llm=MagicMock();llm.invoke.return_value.content='print(value)'
+    monkeypatch.setattr(module,'ChatOpenAI',lambda **kwargs:llm)
+    module.revise_code({**initial_state,'revised_cells':[{'index':0,'source':'value = 42','cell_type':'code'},{'index':1,'source':'print(missing)','cell_type':'code'}], 'execution_result':{'success':False,'cell_index':1,'traceback':'NameError: missing'}})
+    prompt=llm.invoke.call_args.args[0][1].content
+    assert 'NameError: missing' in prompt and 'value = 42' in prompt

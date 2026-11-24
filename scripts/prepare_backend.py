@@ -15,9 +15,9 @@ def prepare():
             raise ValueError('Backend staging must not contain symlinks')
         if target.exists():
             shutil.rmtree(target)
-    for folder in ('apps/api', *(a+'/src' for a in AGENTS), *(a+'/prompts' for a in AGENTS)):
+    for folder in ('apps/api', 'apps/database', *(a+'/src' for a in AGENTS), *(a+'/prompts' for a in AGENTS)):
         for source in (ROOT / folder).rglob('*'):
-            if source.is_file() and not source.is_symlink() and '__pycache__' not in source.parts and (source.suffix == '.py' or ('prompts' in source.parts and source.suffix == '.md')):
+            if source.is_file() and not source.is_symlink() and '__pycache__' not in source.parts and (source.suffix == '.py' or (folder == 'apps/database' and source.suffix == '.sql') or ('prompts' in source.parts and source.suffix in ('.md', '.txt'))):
                 target = DEST / source.relative_to(ROOT)
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(source, target)

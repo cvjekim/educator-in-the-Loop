@@ -24,6 +24,10 @@ def violations(path, text):
         allowed = str(path) in ALLOWED_ROOT
     else:
         allowed = parts[0] in ALLOWED_TREES and (path.suffix in SOURCE_EXTENSIONS or path.name in {'Dockerfile', 'requirements.txt'})
+        if path.suffix == '.txt' and path.name != 'requirements.txt':
+            allowed = len(parts) == 4 and parts[:3] == ('apps', 'api', 'prompts')
+        if path.suffix == '.sql':
+            allowed = len(parts) == 4 and parts[:3] == ('apps', 'database', 'migrations')
         if path.suffix == '.md':
             allowed = len(parts) == 3 and parts[0].endswith('-agent') and parts[1] == 'prompts'
     issues = [] if allowed else ['not an allowed source file']

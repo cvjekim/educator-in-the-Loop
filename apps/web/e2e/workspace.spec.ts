@@ -21,6 +21,7 @@ test('real REST transport: upload → draft → revise → approve → download 
   let runReads=0,eventStreams=0
   page.on('request',r=>{if(r.method()==='GET'&&/\/courses\/[^/]+\/runs$/.test(r.url()))runReads++;if(r.url().endsWith('/events'))eventStreams++})
   await page.goto('/')
+  await page.getByText('기존 초대 토큰으로 로그인').click()
   await page.getByLabel('API 주소').fill('http://127.0.0.1:8100')
   await page.getByLabel('교수자 초대 토큰').fill('e2e-alice-token')
   await page.getByRole('button',{name:'로그인'}).click()

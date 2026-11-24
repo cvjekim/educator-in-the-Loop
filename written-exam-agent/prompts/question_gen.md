@@ -84,3 +84,15 @@ JSON 이외의 텍스트(설명, 머리말, 코드 블록 마커 등)는 절대 
     "model_answer": "로지스틱 회귀는 선형 결합 $z = w^\\top x + b$ 를 시그모이드 함수에 통과시켜 $\\hat{y} = \\sigma(z) \\in (0,1)$ 을 얻습니다. 결정 경계는 $\\sigma(z) = 0.5$, 즉 $z = 0$ 인 초평면으로, 이 경계 양쪽에서 클래스가 나뉩니다. 예측 규칙: $\\hat{y} \\geq 0.5 \\Rightarrow$ 클래스 1, $\\hat{y} < 0.5 \\Rightarrow$ 클래스 0."
   }
 ]
+
+## 형성평가용 추가 필드 (모든 문항 필수)
+위 기본 필드를 유지하고 아래 camelCase 필드를 각 문항에 포함:
+- learningObjective: 제공 주차의 학습목표와 문항의 구체적 연결
+- bloomLevel: remember, understand, apply, analyze, evaluate, create 중 하나
+- cognitiveRationale: 요구되는 사고 과정에 근거한 분류 이유 (동사만으로 분류 금지)
+- expectedDifficulty: easy, medium, hard 중 예상 수준. 인지 수준과 동일시 금지, 실제 정답률 아님
+- difficultyRationale: 선수지식·절차 수·추론 부담 근거
+- evidence: 강의 자료에서 확인 가능한 근거 구절·페이지. 없는 출처 생성 금지
+- distractorRationale: 객관식 오답별 오개념·매력도 설명. 주관식은 "해당 없음"
+객관식 정답은 반드시 하나. 보기 중 중복·정답 단서·근거 없는 모호성 배제.
+요청한 유형별 문항 수를 정확히 준수. 문항 번호는 전체에서 유일하며 1부터 시작.

@@ -10,3 +10,11 @@ httpx==0.28.1
 
 psycopg[binary]==3.2.13
 vercel-queue==0.10.0
+
+google-auth[requests]==2.62.1
+
+ddgs==9.16.1
+langchain-tavily==0.2.18
+arxiv==4.1.0
+
+youtube-search==2.2.0

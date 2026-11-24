@@ -2,7 +2,7 @@ name: Backend continuous deployment
 on:
   push:
     branches: [main]
-    paths: ['apps/api/**', '*-agent/src/**', '*-agent/prompts/**', 'pyproject.toml', 'vercel.json', 'scripts/prepare_backend.py', '.github/workflows/backend-deploy.yml']
+    paths: ['apps/api/**', 'apps/database/**', '*-agent/src/**', '*-agent/prompts/**', 'pyproject.toml', 'vercel.json', 'scripts/prepare_backend.py', '.github/workflows/backend-deploy.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -15,7 +15,7 @@ jobs:
     timeout-minutes: 20
     services:
       postgres:
-        image: postgres:17
+        image: pgvector/pgvector:pg17
         env:
           POSTGRES_PASSWORD: synthetic-ci-password
           POSTGRES_DB: educator_test
@@ -35,7 +35,7 @@ jobs:
           node-version: '24'
       - run: python scripts/public_source_guard.py
       - run: python -m pip install -r apps/api/requirements.txt
-      - run: python -m pytest tests/api -q
+      - run: python -m pytest tests/api tests/database tests/normalized -q
         env:
           TEST_DATABASE_URL: postgresql://postgres:synthetic-ci-password@localhost:5432/educator_test
       - run: python scripts/export_openapi.py --check
@@ -48,7 +48,9 @@ jobs:
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_BACKEND_PROJECT_ID }}
         run: |
           test -n "$VERCEL_TOKEN" && test -n "$VERCEL_PROJECT_ID"
-          if ! vercel deploy --yes --json --verify --environment production --cwd artifacts/backend --token "$VERCEL_TOKEN" > artifacts/backend-result.json 2> artifacts/backend-private.log; then
+          mkdir -p "$RUNNER_TEMP/educator-backend"
+          cp -R artifacts/backend/. "$RUNNER_TEMP/educator-backend/"
+          if ! vercel deploy --yes --json --verify --environment production --cwd "$RUNNER_TEMP/educator-backend" --token "$VERCEL_TOKEN" > artifacts/backend-result.json 2> artifacts/backend-private.log; then
             echo "::error::Backend deployment failed; inspect the connected Vercel project."
             exit 1
           fi

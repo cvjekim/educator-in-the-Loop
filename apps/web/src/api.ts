@@ -3,8 +3,8 @@ export type TaskType = 'manager'|'lecture'|'practice'|'exam'|'project'
 export type Course = {id:string;title:string;syllabus:string;created_at:string}
 export type Document = {id:string;course_id:string;filename:string;size:number;pages:number;status:string}
 export type Citation = {document_id:string;filename:string;page:number;text:string}
-export type Run = {id:string;course_id:string;task_type:TaskType;topic:string;status:string;revision:number;mode:'demo'|'real';draft:Record<string,unknown>|null;citations:Citation[];output:string|null;output_format:string;error:string|null;created_at:string;child_ids:string[]}
-export type RunInput = {task_type:TaskType;topic:string;week:number;guidelines:string;rubric_guidelines:string;document_ids:string[];parameters:{question_type:string;count:number}[];roster:{student_id:string;name:string;github_id:string;repo_name:string}[];execute_notebook:boolean;max_iterations:number}
+export type Run = {educationReview?:import('./EducationReview').EducationReport|null;downloadFileName?:string;weekNumbers?:number[];id:string;course_id:string;task_type:TaskType;topic:string;status:string;revision:number;mode:'demo'|'real';draft:Record<string,unknown>|null;citations:Citation[];output:string|null;output_format:string;error:string|null;created_at:string;child_ids:string[]}
+export type RunInput = {referenceSources?:{kind:'draft'|'material';id:string}[];weekNumbers?:number[];courseStudentId?:string;rubricVersionId?:string;task_type:TaskType;topic:string;week:number;guidelines:string;rubric_guidelines:string;document_ids:string[];parameters:{question_type:string;count:number}[];roster:{student_id:string;name:string;github_id:string;repo_name:string}[];execute_notebook:boolean;max_iterations:number}
 export type Client = {
   subscribeRuns:(course:string,signal:AbortSignal,onRuns:(runs:Run[])=>void)=>Promise<void>
   me:()=>Promise<{mode:string;admin?:boolean}>

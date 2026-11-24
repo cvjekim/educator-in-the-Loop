@@ -24,6 +24,7 @@ from .models import Course, CourseCreate, Document, DraftUpdate, Error, Feedback
 from .store import Store, pack, update_run, recover_expired
 from .queueing import schedule
 from . import retrieval
+from .accounts import install_accounts
 
 ROOT = Path(__file__).resolve().parents[2]
 NAMES = {'manager': '학기 계획', 'lecture': '강의 노트', 'practice': '실습 노트북', 'exam': '시험·루브릭', 'project': '프로젝트 평가'}
@@ -49,12 +50,13 @@ def create_app(db_path=None, tokens=None, mode=None):
         raise ValueError('API_MODE must be demo or real')
 
     app = FastAPI(title='Educator-in-the-Loop API', version='0.2.0',
-        description='교수자 강의 준비 API. Bearer 초대 토큰 인증. 202 작업 생성 → 상태 조회 → 버전별 교수자 검토 → 다운로드. demo 응답은 합성 데이터이며 실제 모델 실행이 아닙니다.',
+        description='교수자 강의 준비 API. Google 로그인 세션 또는 기존 초대 토큰 인증. 202 작업 생성 → 상태 조회 → 버전별 교수자 검토 → 다운로드. demo 응답은 합성 데이터이며 실제 모델 실행이 아닙니다.',
         responses={401: {'model': Error}, 404: {'model': Error}, 409: {'model': Error}, 422: {'model': Error}})
     app.state.store = store
     app.state.mode = run_mode
     app.add_middleware(CORSMiddleware, allow_origins=os.getenv('API_CORS_ORIGINS', 'http://localhost:5173,http://127.0.0.1:5173').split(','),
                        allow_methods=['GET', 'POST', 'PATCH', 'DELETE'], allow_headers=['Authorization', 'Content-Type', 'Idempotency-Key'])
+    accounts = install_accounts(app)
     bearer = HTTPBearer(auto_error=False)
     admin_ids = set(filter(None, os.getenv('API_ADMIN_IDS', '').split(',')))
 
@@ -68,7 +70,11 @@ def create_app(db_path=None, tokens=None, mode=None):
                 invite = db.execute('SELECT identity FROM invitations WHERE token_hash=? AND revoked=0', (token_hash,)).fetchone()
                 if invite:
                     return invite['identity']
-        fail(401, 'unauthorized', '유효한 초대 토큰으로 연결해 주세요.')
+            if accounts:
+                profile = accounts.resolve(credentials.credentials)
+                if profile:
+                    return profile['id']
+        fail(401, 'unauthorized', '다시 로그인해 주세요.')
 
     @app.exception_handler(HTTPException)
     async def http_error(request, exc):
@@ -459,4 +465,8 @@ def create_app(db_path=None, tokens=None, mode=None):
     return app
 
 
-app = create_app()
+if os.getenv('API_STORAGE') == 'normalized':
+    from .normalized.app import create_app as create_normalized_app
+    app = create_normalized_app()
+else:
+    app = create_app()

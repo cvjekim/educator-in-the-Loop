@@ -10,3 +10,9 @@
 .draft{font-size:16px}.draft p,.draft li{line-height:1.9}.subtitle{font-size:14px}label,input:not([type=checkbox]):not([type=file]),select,textarea{font-size:14px}.task-card span,.guide-panel li p,.form-footer>span{font-size:12px}
 
 .login-shell{min-height:100dvh;display:grid;place-items:center;padding:24px}.login-panel{width:min(100%,480px);box-sizing:border-box}.login-panel h1{font-size:28px}.login-panel>p{line-height:1.7}.login-panel form{margin-top:28px}.login-panel .notice{margin-top:20px}
+
+.account-actions{display:flex;gap:12px;flex-wrap:wrap;margin:24px 0}.legacy-login{margin-top:28px}.legacy-login summary{cursor:pointer;margin-bottom:16px}
+
+.course-plan{margin-bottom:24px}.week-editor{display:grid;grid-template-columns:90px 1fr 1fr auto;gap:12px;align-items:end}.week-checks{display:flex;flex-wrap:wrap;gap:12px}.week-checks label{display:flex;gap:8px;align-items:center}.week-checks input{width:auto}.syllabus-preview{max-height:300px;overflow:auto;white-space:pre-wrap}.task-scope fieldset{margin:20px 0}@media(max-width:768px){.week-editor{grid-template-columns:1fr}.coursebar{flex-wrap:wrap}.course-plan{padding:20px}}
+
+.plan-text { white-space: pre-wrap; overflow-wrap: anywhere; }

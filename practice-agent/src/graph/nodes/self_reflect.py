@@ -1,12 +1,14 @@
 """
 Node: self_reflect
-Executes revised code cells in a sandboxed subprocess and observes the result.
+Executes ordered code cells in one subprocess and observes the result.
+The subprocess is not a security sandbox; hosted execution requires a separate runner.
 Sets code_quality = 'pass' if all cells run without error, 'fail' otherwise.
 The pipeline loops back to revise_code on 'fail' until max_iterations is reached.
 """
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 import tempfile
@@ -47,18 +49,24 @@ def _execute_cell(source: str) -> ExecutionResult:
 def self_reflect(state: PracticeState) -> dict:
     iteration = state.get("iteration_count", 0) + 1
 
-    for cell in state["revised_cells"]:
-        result = _execute_cell(cell["source"])
-        if not result["success"]:
-            result["cell_index"] = cell["index"]
-            return {
-                "current_stage": "self_reflect",
-                "overall_progress": min(30 + iteration * 10, 60),
-                "status_message": f"실행 오류 감지 (셀 {cell['index']}) — 재수정 중…",
-                "code_quality": "fail",
-                "execution_result": result,
-                "iteration_count": iteration,
-            }
+    cells = sorted(state["revised_cells"], key=lambda c: c["index"])
+    # One fresh process per attempt, one shared namespace for every cell.
+    program = "\n".join(
+        f"exec(compile({cell['source']!r}, '<notebook-cell-{cell['index']}>', 'exec'), globals())"
+        for cell in cells
+    )
+    result = _execute_cell(program)
+    if not result["success"]:
+        indices = re.findall(r"<notebook-cell-(\d+)>", result.get("traceback") or "")
+        result["cell_index"] = int(indices[-1]) if indices else None
+        return {
+            "current_stage": "self_reflect",
+            "overall_progress": min(30 + iteration * 10, 60),
+            "status_message": "실행 오류 감지 — 전체 셀 문맥으로 재수정 중…",
+            "code_quality": "fail",
+            "execution_result": result,
+            "iteration_count": iteration,
+        }
 
     return {
         "current_stage": "self_reflect",
