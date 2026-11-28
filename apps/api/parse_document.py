@@ -5,7 +5,7 @@ import sys
 import zipfile
 
 
-def parse(path):
+def parse(path, *, syllabus=False):
     suffix = path.suffix.lower()
     if suffix in ('.md', '.txt'):
         pages = [path.read_text(encoding='utf-8')]
@@ -24,6 +24,7 @@ def parse(path):
             if len(pdf.pages) > 200:
                 raise ValueError('too many pages')
             pages = [p.extract_text() or '' for p in pdf.pages]
+            tables = [table for page in pdf.pages for table in page.extract_tables()] if syllabus else []
     elif suffix == '.pptx':
         with zipfile.ZipFile(path) as archive:
             if sum(i.file_size for i in archive.infolist()) > 50_000_000:
@@ -39,12 +40,14 @@ def parse(path):
         raise ValueError('no extractable text; OCR required')
     if sum(map(len, pages)) > 500_000:
         raise ValueError('extracted text too large')
-    return {'pages': pages}
+    if suffix == '.pdf' and syllabus and sum(len(cell or '') for table in tables for row in table for cell in row) > 500_000:
+        raise ValueError('extracted tables too large')
+    return {'pages': pages, **({'tables':tables} if suffix=='.pdf' and syllabus else {})}
 
 
 if __name__ == '__main__':
     try:
-        print(json.dumps(parse(Path(sys.argv[1])), ensure_ascii=False))
+        print(json.dumps(parse(Path(sys.argv[1]),syllabus='--syllabus' in sys.argv[2:]), ensure_ascii=False))
     except Exception:
         print('Document cannot be parsed or exceeds limits', file=sys.stderr)
         sys.exit(1)

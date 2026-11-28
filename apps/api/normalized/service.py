@@ -32,14 +32,14 @@ def insert(db,table,**values):
 
 def sha(data):return hashlib.sha256(data).hexdigest()
 
-def parse_file(name,content):
+def parse_file(name,content,*,syllabus=False):
     suffix=Path(name).suffix.lower()
     if suffix not in ('.pdf','.pptx','.md','.txt','.ipynb'):fail(415,'PDF, PPTX, MD, TXT, IPYNB 파일을 선택하세요.')
     if not content or len(content)>10_000_000:fail(413,'파일은 10MB 이하이며 비어 있지 않아야 합니다.')
     with tempfile.TemporaryDirectory() as folder:
         path=Path(folder)/('input'+suffix);path.write_bytes(content)
         try:
-            result=subprocess.run([sys.executable,str(ROOT/'apps/api/parse_document.py'),str(path)],capture_output=True,text=True,timeout=30,
+            result=subprocess.run([sys.executable,str(ROOT/'apps/api/parse_document.py'),str(path),*(['--syllabus'] if syllabus else [])],capture_output=True,text=True,timeout=30,
                 env={'PATH':os.environ.get('PATH',''),'PYTHONPATH':os.pathsep.join(dict.fromkeys([str(ROOT),*sys.path])),'PYTHONDONTWRITEBYTECODE':'1'})
             if result.returncode:fail(422,'문서를 읽을 수 없습니다. 파일 형식이나 OCR 필요 여부를 확인하세요.')
             data=json.loads(result.stdout)

@@ -99,10 +99,11 @@ def create_app(database=None,storage=None,mode=None):
         with database.transaction(user) as db:
             d=one(db,'documents',documentId);v=one(db,'documentVersions',d['currentVersionId'])
             from .service import parse_file
-            pages=parse_file(v['originalFileName'],service.files.read(v['storageKey']))['pages']
+            parsed=parse_file(v['originalFileName'],service.files.read(v['storageKey']),syllabus=True)
+            pages=parsed['pages']
             from .syllabus import parse_syllabus
             text='\n\n'.join(pages)[:60000]
-            structured=parse_syllabus(text)
+            structured=parse_syllabus(text,parsed.get('tables'))
             return {'documentVersionId':v['id'],'text':text,'suggestedWeeks':structured['weeks'],'suggestedPlan':structured,'requiresConfirmation':True}
     @app.get('/v1/documents',tags=['개인 자료실'])
     def library(user=Depends(owner)):return service.library(user)
